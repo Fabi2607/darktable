@@ -1767,6 +1767,9 @@ void dt_image_init(dt_image_t *img)
   img->exif_iso = 0;
   img->exif_focal_length = 0;
   img->exif_focus_distance = 0;
+  img->exif_correction_type = CORRECTION_TYPE_NONE;
+  memset(&img->exif_correction_data, 0, sizeof(img->exif_correction_data));
+
   img->geoloc.latitude = NAN;
   img->geoloc.longitude = NAN;
   img->geoloc.elevation = NAN;
