@@ -47,7 +47,7 @@
 
 // whenever _create_*_schema() gets changed you HAVE to bump this version and add an update path to
 // _upgrade_*_schema_step()!
-#define CURRENT_DATABASE_VERSION_LIBRARY 34
+#define CURRENT_DATABASE_VERSION_LIBRARY 35
 #define CURRENT_DATABASE_VERSION_DATA     9
 
 typedef struct dt_database_t
@@ -130,6 +130,8 @@ static gboolean _migrate_schema(dt_database_t *db, int version)
   sqlite3_exec(db->handle, "ALTER TABLE main.images ADD COLUMN colorspace INTEGER", NULL, NULL, NULL);
   sqlite3_exec(db->handle, "ALTER TABLE main.images ADD COLUMN version INTEGER", NULL, NULL, NULL);
   sqlite3_exec(db->handle, "ALTER TABLE main.images ADD COLUMN max_version INTEGER", NULL, NULL, NULL);
+  sqlite3_exec(db->handle, "ALTER TABLE main.images ADD COLUMN exif_correction_type INTEGER", NULL, NULL, NULL);
+  sqlite3_exec(db->handle, "ALTER TABLE main.images ADD COLUMN exif_correction_data BLOB", NULL, NULL, NULL);
   _SQLITE3_EXEC(db->handle, "UPDATE main.images SET orientation = -1 WHERE orientation IS NULL", NULL, NULL, NULL);
   _SQLITE3_EXEC(db->handle, "UPDATE main.images SET focus_distance = -1 WHERE focus_distance IS NULL",
                 NULL, NULL, NULL);
@@ -159,7 +161,8 @@ static gboolean _migrate_schema(dt_database_t *db, int version)
       "raw_auto_bright_threshold REAL, raw_black INTEGER, raw_maximum INTEGER, "
       "caption VARCHAR, description VARCHAR, license VARCHAR, sha1sum CHAR(40), "
       "orientation INTEGER, histogram BLOB, lightmap BLOB, longitude REAL, "
-      "latitude REAL, color_matrix BLOB, colorspace INTEGER, version INTEGER, max_version INTEGER)",
+      "latitude REAL, color_matrix BLOB, colorspace INTEGER, version INTEGER, max_version INTEGER, "
+      "exif_correction_type INTEGER, exif_correction_data BLOB)",
       NULL, NULL, NULL);
   _SQLITE3_EXEC(db->handle, "CREATE INDEX main.images_group_id_index ON images (group_id)", NULL, NULL, NULL);
   _SQLITE3_EXEC(db->handle, "CREATE INDEX main.images_film_id_index ON images (film_id)", NULL, NULL, NULL);
@@ -170,12 +173,13 @@ static gboolean _migrate_schema(dt_database_t *db, int version)
       "output_width, output_height, crop, raw_parameters, raw_denoise_threshold, "
       "raw_auto_bright_threshold, raw_black, raw_maximum, caption, description, license, sha1sum, "
       "orientation, histogram, lightmap, longitude, latitude, color_matrix, colorspace, version, "
-      "max_version) "
+      "max_version, exif_correction_type, exif_correction_data) "
       "SELECT id, group_id, film_id, width, height, filename, maker, model, lens, exposure, aperture, iso, "
       "focal_length, focus_distance, datetime_taken, flags, output_width, output_height, crop, "
       "raw_parameters, raw_denoise_threshold, raw_auto_bright_threshold, raw_black, raw_maximum, "
       "caption, description, license, sha1sum, orientation, histogram, lightmap, longitude, "
-      "latitude, color_matrix, colorspace, version, max_version FROM dt_migration_table",
+      "latitude, color_matrix, colorspace, version, max_version, exif_correction_type, exif_correction_data "
+      "FROM dt_migration_table",
       NULL, NULL, NULL);
   _SQLITE3_EXEC(db->handle, "DROP TABLE dt_migration_table", NULL, NULL, NULL);
   ////////////////////////////// selected_images
@@ -1967,6 +1971,17 @@ static int _upgrade_library_schema_step(dt_database_t *db, int version)
 
     sqlite3_exec(db->handle, "COMMIT", NULL, NULL, NULL);
     new_version = 34;
+  } else if (version == 34)
+  {
+    sqlite3_exec(db->handle, "BEGIN TRANSACTION", NULL, NULL, NULL);
+
+    TRY_EXEC("ALTER TABLE main.images ADD COLUMN exif_correction_type INTEGER",
+             "[init] can't create column exif_correction_type\n");
+    TRY_EXEC("ALTER TABLE main.images ADD COLUMN exif_correction_data INTEGER",
+             "[init] can't create exif_correction_data\n");
+
+    sqlite3_exec(db->handle, "COMMIT", NULL, NULL, NULL);
+    new_version = 35;
   }
   else
     new_version = version; // should be the fallback so that calling code sees that we are in an infinite loop
@@ -2255,7 +2270,7 @@ static void _create_library_schema(dt_database_t *db)
       "orientation INTEGER, histogram BLOB, lightmap BLOB, longitude REAL, "
       "latitude REAL, altitude REAL, color_matrix BLOB, colorspace INTEGER, version INTEGER, "
       "max_version INTEGER, write_timestamp INTEGER, history_end INTEGER, position INTEGER, "
-      "aspect_ratio REAL, exposure_bias REAL, "
+      "aspect_ratio REAL, exposure_bias REAL, exif_correction_type INTEGER, exif_correction_data BLOB, "
       "import_timestamp INTEGER DEFAULT -1, change_timestamp INTEGER DEFAULT -1, "
       "export_timestamp INTEGER DEFAULT -1, print_timestamp INTEGER DEFAULT -1, "
       "FOREIGN KEY(film_id) REFERENCES film_rolls(id) ON DELETE CASCADE ON UPDATE CASCADE, "

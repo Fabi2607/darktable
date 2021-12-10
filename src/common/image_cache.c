@@ -42,7 +42,8 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
       "       aperture, iso, focal_length, datetime_taken, flags, crop, orientation,"
       "       focus_distance, raw_parameters, longitude, latitude, altitude, color_matrix,"
       "       colorspace, version, raw_black, raw_maximum, aspect_ratio, exposure_bias,"
-      "       import_timestamp, change_timestamp, export_timestamp, print_timestamp, output_width, output_height"
+      "       import_timestamp, change_timestamp, export_timestamp, print_timestamp, output_width, output_height,"
+      "       exif_correction_type, exif_correction_data"
       "  FROM main.images"
       "  WHERE id = ?1",
       -1, &stmt, NULL);
@@ -119,6 +120,12 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
     img->print_timestamp = sqlite3_column_int(stmt, 32);
     img->final_width = sqlite3_column_int(stmt, 33);
     img->final_height = sqlite3_column_int(stmt, 34);
+    img->exif_correction_type = sqlite3_column_int(stmt, 35);
+    const void *exif_correction_data = sqlite3_column_blob(stmt, 36);
+    if(exif_correction_data)
+      memcpy(&img->exif_correction_data, exif_correction_data, sizeof(img->exif_correction_data));
+    else
+      memset(&img->exif_correction_data, 0, sizeof(img->exif_correction_data));
 
     // buffer size? colorspace?
     if(img->flags & DT_IMAGE_LDR)
@@ -256,8 +263,8 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
                               "     colorspace = ?23, raw_black = ?24, raw_maximum = ?25,"
                               "     aspect_ratio = ROUND(?26,1), exposure_bias = ?27,"
                               "     import_timestamp = ?28, change_timestamp = ?29, export_timestamp = ?30,"
-                              "     print_timestamp = ?31, output_width = ?32, output_height = ?33"
-                              " WHERE id = ?34",
+                              "     print_timestamp = ?31, output_width = ?32, output_height = ?33, exif_correction_type = ?34, exif_correction_data = ?35"
+                              " WHERE id = ?36",
                               -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->width);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, img->height);
@@ -293,7 +300,9 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 31, img->print_timestamp);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 32, img->final_width);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 33, img->final_height);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 34, img->id);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 34, img->exif_correction_type);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 35, &img->exif_correction_data, sizeof(img->exif_correction_data), SQLITE_STATIC);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 36, img->id);
   const int rc = sqlite3_step(stmt);
   if(rc != SQLITE_DONE) fprintf(stderr, "[image_cache_write_release] sqlite3 error %d\n", rc);
   sqlite3_finalize(stmt);
